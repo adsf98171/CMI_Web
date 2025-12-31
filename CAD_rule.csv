@@ -1,0 +1,8 @@
+﻿category,condition,codes,drg,rw
+main,unstable_refractory,"I25.110,I25.112",124,1.0448
+main,angina,"I25.111,I25.118,I25.119",125,0.7146
+main,no_angina,I25.10,125,0.7146
+complex,heart_failure,"I50.1,I50.20,I50.30,I50.810,I50.9",124,1.0448
+complex,pulmonary_embolism,"I26.01,I26.02,I26.09,I26.90,I26.92,I26.93,I26.94,I26.99,I27.82",124,1.0448
+complex,cardiomyopathy,"I42.0,I42.2,I42.8,I42.9",124,1.0448
+complex,ventricular_tachycardia,"I47.0,I47.1,I47.20",124,1.0448

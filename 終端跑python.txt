@@ -1,0 +1,20 @@
+1. 終端輸入 cd C:\Users\482525\Desktop\ICD10_CAD_Project_Integrate_online
+2. C:\Python310\python.exe app.py
+
+
+Note: app.py 改 host='0.0.0.0'，監聽所有網路介面（內網可連）
+      終端/cmd輸入:ipconfig，找「IPv4 Address」是10.18.11.26
+
+Project/
+├── app.py                  ← 主入口
+├── config.py               ← 所有設定集中
+├── common/                 ← 共用模組
+│   ├── azure_client.py     ← OpenAI client
+│   ├── icd_db.py           ← ICD 中英文對應
+│   ├── cad_rules.py        ← CAD 規則載入
+│   └── utils.py            ← post_process 等工具
+├── tasks/                  ← 任務模組
+│   └── icd_recommend.py    ← ICD + CAD 判斷 route
+├── templates/
+│   └── index_CAD.html      ← 前端（不拆 CSS/JS）
+└── ICD_code.csv, CAD_rule.csv

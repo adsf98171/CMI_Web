@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>醫療 AI 助手 - 多功能網站</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f9f9f9; }
+        h2, h3 { color: #2c3e50; }
+        select, textarea, input[type="file"] {
+            width: 100%; padding: 10px; font-size: 14px; border: 1px solid #ddd; border-radius: 5px; margin: 8px 0;
+            box-sizing: border-box;
+        }
+        button { 
+            padding: 10px 20px; margin: 10px 5px 10px 0; background: #3498db; color: white; 
+            border: none; border-radius: 5px; cursor: pointer; font-size: 14px;
+        }
+        button:hover { background: #2980b9; }
+        button.clear { background: #e74c3c; }
+        button.clear:hover { background: #c0392b; }
+        button.download { background: #27ae60; }
+        button.download:hover { background: #219a52; }
+        #result {
+            background: white; border: 1px solid #ddd; padding: 20px; border-radius: 5px; min-height: 200px;
+            white-space: pre-wrap; margin-top: 20px; font-size: 15px; line-height: 1.6;
+        }
+        .section {
+            background: white; padding: 25px; border-radius: 8px; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px;
+        }
+        label { display: block; font-weight: bold; color: #2c3e50; margin-bottom: 8px; }
+        .hidden { display: none; }
+        .file-info { color: #7f8c8d; font-style: italic; margin: 10px 0; }
+        .note { font-size: 13px; color: #7f8c8d; margin-top: 5px; }
+        #download_section { display: none; margin-top: 15px; }
+    </style>
+</head>
+<body>
+    <h2>醫療 AI 助手 - 多功能網站</h2>
+
+    <!-- 功能選擇 -->
+    <div class="section">
+        <label for="task_select">選擇功能：</label>
+        <select id="task_select" onchange="switchTask()">
+            <option value="icd">ICD-10 診斷碼推薦</option>
+            <option value="summary">產生報告總結及建議</option>
+        </select>
+    </div>
+
+    <!-- ICD 推薦區塊 -->
+    <div id="icd_task" class="section">
+        <h3>ICD-10 診斷碼推薦</h3>
+        <label for="icd_case_text">病例文字（必填）：</label>
+        <textarea id="icd_case_text" rows="10" placeholder="貼上完整病歷、檢查報告等..."></textarea>
+
+        <label for="icd_discharge">出院摘要（選填，作為參考）：</label>
+        <textarea id="icd_discharge" rows="6" placeholder="若有出院小結，請貼這裡（可留空）..."></textarea>
+
+        <label for="icd_prompt">自訂提示（選填）：</label>
+        <textarea id="icd_prompt" rows="4" placeholder="例如：請特別注意心血管疾病 / 用更保守標準推薦"></textarea>
+
+        <div>
+            <button onclick="generateICD()">產生 ICD 診斷建議</button>
+            <button onclick="clearICD()" class="clear">清空輸入</button>
+        </div>
+    </div>
+
+    <!-- 摘要產生區塊 -->
+    <div id="summary_task" class="section hidden">
+        <h3>產生報告摘要（可自動插入 Word）</h3>
+        <label for="summary_text">文字內容（選填）：</label>
+        <textarea id="summary_text" rows="8" placeholder="直接輸入文字，或上傳檔案後自動填入..."></textarea>
+
+        <label for="summary_file">上傳 Word 檔案（.docx，選填）：</label>
+        <input type="file" id="summary_file" accept=".docx">
+        <div class="file-info" id="summary_file_info">尚未選擇檔案</div>
+        <p class="note">上傳 Word 後，可選擇是否下載已插入摘要的檔案（書籤：AI_SUMMARY_HERE）</p>
+
+        <label for="summary_prompt">自訂摘要提示（選填）：</label>
+        <textarea id="summary_prompt" rows="4" placeholder="例如：產生簡短摘要，重點強調診斷與治療 / 控制在200字"></textarea>
+
+        <div>
+            <button onclick="generateSummary()">產生摘要</button>
+            <button onclick="clearSummary()" class="clear">清空輸入</button>
+        </div>
+
+        <!-- 摘要產生區塊內加儲存功能 -->
+        <div id="prompt_save_section" style="margin-top: 20px;">
+            <label for="prompt_name">儲存名稱（選填）：</label>
+            <input type="text" id="prompt_name" placeholder="例如：分析模板(一)">
+    
+            <button onclick="savePrompt()">儲存當前 Prompt</button>
+    
+            <label for="saved_prompts">載入已儲存 Prompt：</label>
+            <select id="saved_prompts">
+                <option value="">-- 選擇 --</option>
+            </select>
+            <button onclick="loadSavedPrompt()">載入</button>
+        </div>
+    </div>
+
+    <!-- 統一輸出區 -->
+    <div class="section">
+        <h3>AI 生成結果</h3>
+        <pre id="result">請選擇功能並輸入內容後產生結果...</pre>
+        
+        <!-- 新增：下載按鈕區（有上傳檔案時才顯示） -->
+        <div id="download_section">
+            <button onclick="downloadWord()" class="download">下載含 AI 摘要的 Word 檔案</button>
+            <p class="note">摘要已插入書籤「AI_SUMMARY_HERE」位置</p>
+        </div>
+    </div>
+
+    <script>
+        let currentSummary = "";        // 儲存生成的摘要文字
+        let wordFileBlob = null;        // 儲存生成的 Word blob
+        let wordFileName = "";          // 儲存檔名
+
+        // 摘要產生(支援上傳與插入)
+        function generateSummary() {
+            const text = document.getElementById('summary_text').value.trim();
+            const prompt = document.getElementById('summary_prompt').value.trim();
+            const fileInput = document.getElementById('summary_file');
+            const file = fileInput.files[0];
+
+            const formData = new FormData();
+            formData.append('text_input', text);
+            formData.append('custom_prompt', prompt);
+            if (file) formData.append('file', file);
+
+            document.getElementById('result').textContent = "處理中，請稍候...";
+            document.getElementById('download_section').style.display = 'none';
+
+            fetch('/generate_summary', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => {
+                const contentType = res.headers.get('content-type');
+
+                // 修正：完整匹配 Word 的 MIME type
+                if (contentType && contentType.includes('officedocument.wordprocessingml.document')) {
+                    return res.blob().then(blob => ({
+                        blob,
+                        summary: res.headers.get('X-Summary-Text') ? decodeURIComponent(res.headers.get('X-Summary-Text')) : ""
+                    }));
+                } else {
+                    return res.json();
+                }
+            })
+            .then(data => {
+                if (data.blob) {
+                    // 有上傳 Word → 儲存並顯示下載按鈕
+                    currentSummary = data.summary || "（摘要內容未回傳）";
+                    wordFileBlob = data.blob;
+                    wordFileName = file ? `AI摘要_${file.name}` : 'AI摘要.docx';
+            
+                    document.getElementById('result').textContent = currentSummary;
+                    document.getElementById('download_section').style.display = 'block';
+                } else {
+                    // 純文字回傳
+                    document.getElementById('result').textContent = data.answer || data.error || '無回應';
+                    document.getElementById('download_section').style.display = 'none';
+                }
+            })
+            .catch(err => {
+                document.getElementById('result').textContent = '錯誤：' + err;
+                document.getElementById('download_section').style.display = 'none';
+            });
+        }
+
+       let savedPrompts = [];  // 儲存列表（從後端載入）
+       // 頁面載入時，從後端載入已儲存 Prompt
+       window.onload = function() {
+           fetch('/load_saved_prompts')
+               .then(res => res.json())
+               .then(data => {
+                   savedPrompts = data.prompts || [];
+                   const select = document.getElementById('saved_prompts');
+                   select.innerHTML = '<option value="">-- 選擇 --</option>';
+                   savedPrompts.forEach(p => {
+                       const option = document.createElement('option');
+                       option.value = p.name;
+                       option.textContent = p.name;
+                       select.appendChild(option);
+                   });
+               });
+       };
+
+       // 儲存 Prompt
+       function savePrompt() {
+           const name = document.getElementById('prompt_name').value.trim() || '品質管理摘要';
+           const prompt = document.getElementById('summary_prompt').value.trim();
+
+           if (!prompt) {
+               alert("請先輸入 Prompt 內容！");
+               return;
+           }
+
+           fetch('/save_prompt', {
+               method: 'POST',
+               headers: {'Content-Type': 'application/json'},
+               body: JSON.stringify({ name: name, prompt: prompt })
+           })
+           .then(res => res.json())
+           .then(data => {
+               if (data.success) {
+                   alert("儲存成功！上限 5 個，已超過將刪除最舊。");
+                   // 重新載入列表
+                   window.onload();  // 刷新選單
+               } else {
+                   alert(data.error);
+               }
+           });
+       }
+
+       // 載入已儲存 Prompt
+       function loadSavedPrompt() {
+           const name = document.getElementById('saved_prompts').value;
+           if (!name) {
+               alert("請選擇一個儲存的 Prompt");
+               return;
+           }
+
+           const selected = savedPrompts.find(p => p.name === name);
+           if (selected) {
+        document.getElementById('summary_prompt').value = selected.prompt;
+               alert("已載入 " + name);
+           }
+       }
+        // 使用者決定下載時觸發
+        function downloadWord() {
+            if (!wordFileBlob) {
+                alert("無可下載的檔案！");
+                return;
+            }
+            
+            const url = window.URL.createObjectURL(wordFileBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = wordFileName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+            
+            alert("下載完成！");
+        }
+
+        // 切換任務
+        function switchTask() {
+            const task = document.getElementById('task_select').value;
+            document.getElementById('icd_task').classList.toggle('hidden', task !== 'icd');
+            document.getElementById('summary_task').classList.toggle('hidden', task !== 'summary');
+            document.getElementById('result').textContent = '請選擇功能並輸入內容後產生結果...';
+        }
+
+        // ICD 產生
+        function generateICD() {
+            const case_text = document.getElementById('icd_case_text').value.trim();
+            const discharge = document.getElementById('icd_discharge').value.trim();
+            const prompt = document.getElementById('icd_prompt').value.trim();
+
+            if (!case_text) {
+                alert("請輸入病例文字！");
+                return;
+            }
+
+            document.getElementById('result').textContent = "處理中，請稍候...";
+
+            fetch('/generate_icd', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                case_text: case_text,           
+                discharge_summary: discharge,   
+                custom_prompt: prompt          
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('result').textContent = data.answer || data.error || '無回應';
+            })
+            .catch(err => {
+                document.getElementById('result').textContent = '網路錯誤：' + err;
+            });
+        }
+
+        // 清空函數
+        function clearICD() {
+            document.getElementById('icd_case_text').value = '';
+            document.getElementById('icd_discharge').value = '';
+            document.getElementById('icd_prompt').value = '';
+        }
+
+        function clearSummary() {
+            document.getElementById('summary_text').value = '';
+            document.getElementById('summary_prompt').value = '';
+            document.getElementById('summary_file').value = '';
+            document.getElementById('summary_file_info').textContent = '尚未選擇檔案';
+        }
+
+        // 檔案顯示
+        document.getElementById('summary_file').addEventListener('change', function(e) {
+            const name = e.target.files[0] ? e.target.files[0].name : '尚未選擇檔案';
+            document.getElementById('summary_file_info').textContent = '已選擇檔案：' + name;
+        });
+
+        // 初始顯示 ICD
+        switchTask();
+    </script>
+</body>
+</html>
